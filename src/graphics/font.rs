@@ -1,19 +1,28 @@
 use crate::{
-    load_file,
-    Result,
     error::QuicksilverError,
     graphics::{Color, Image, PixelFormat},
+    load_file, Result,
 };
-use futures::{Future, future};
-use rusttype::{Font as RTFont, FontCollection, PositionedGlyph, Scale, point};
+use futures::{future, Future};
+use rusttype::{point, Font as RTFont, FontCollection, PositionedGlyph, Scale};
 use std::path::Path;
+use std::fs::File;
+use std::io::prelude::*;
 
 /// An in-memory TTF font that can render text on demand
 pub struct Font {
-    pub(crate) data: RTFont<'static>
+    pub(crate) data: RTFont<'static>,
 }
 
 impl Font {
+    /// Load a font at a given file
+    pub fn load_sync(path: impl AsRef<Path>) -> Font {
+        let mut file = File::open(path).unwrap();
+        let mut contents:Vec<u8> = Vec::new();
+        file.read_to_end(&mut contents);
+        Font::from_bytes(contents).unwrap()
+    }
+
     /// Load a font at a given file
     pub fn load(path: impl AsRef<Path>) -> impl Future<Item = Font, Error = QuicksilverError> {
         load_file(path)
@@ -24,14 +33,14 @@ impl Font {
     /// Creates font from bytes sequence.
     pub fn from_slice(data: &'static [u8]) -> Result<Self> {
         Ok(Font {
-            data: FontCollection::from_bytes(data)?.into_font()?
+            data: FontCollection::from_bytes(data)?.into_font()?,
         })
     }
 
     /// Creates font from owned bytes sequence.
     pub fn from_bytes(data: Vec<u8>) -> Result<Self> {
         Ok(Font {
-            data: FontCollection::from_bytes(data)?.into_font()?
+            data: FontCollection::from_bytes(data)?.into_font()?,
         })
     }
 
@@ -40,23 +49,35 @@ impl Font {
     /// This function handles line breaks but it does not take into account unicode
     /// normalization or other text formatting.
     pub fn render(&self, text: &str, style: &FontStyle) -> Result<Image> {
-        let scale = Scale { x: style.size, y: style.size };
+        let scale = Scale {
+            x: style.size,
+            y: style.size,
+        };
         let line_count = text.lines().count();
         let glyphs_per_line = text
             .lines()
             .map(|text| {
                 //Avoid clipping
                 let offset = point(0.0, self.data.v_metrics(scale).ascent);
-                let glyphs = self.data.layout(text.trim_end(), scale, offset)
+                let glyphs = self
+                    .data
+                    .layout(text.trim_end(), scale, offset)
                     .collect::<Vec<PositionedGlyph>>();
-                let width = glyphs.iter().rev()
-                    .map(|g|
-                        g.position().x as f32 + g.unpositioned().h_metrics().advance_width)
-                    .next().unwrap_or(0.0).ceil() as usize;
+                let width = glyphs
+                    .iter()
+                    .rev()
+                    .map(|g| g.position().x as f32 + g.unpositioned().h_metrics().advance_width)
+                    .next()
+                    .unwrap_or(0.0)
+                    .ceil() as usize;
                 (glyphs, width)
             })
             .collect::<Vec<_>>();
-        let max_width = *glyphs_per_line.iter().map(|(_, width)| width).max().unwrap_or(&0);
+        let max_width = *glyphs_per_line
+            .iter()
+            .map(|(_, width)| width)
+            .max()
+            .unwrap_or(&0);
         let mut pixels = vec![0 as u8; 4 * line_count * max_width * style.size as usize];
         for (line_index, (glyphs, width)) in glyphs_per_line.iter().enumerate() {
             let width = *width;
@@ -85,8 +106,12 @@ impl Font {
                 }
             }
         }
-        Image::from_raw(pixels.as_slice(), max_width as u32,
-                        line_count as u32 * style.size as u32, PixelFormat::RGBA)
+        Image::from_raw(
+            pixels.as_slice(),
+            max_width as u32,
+            line_count as u32 * style.size as u32,
+            PixelFormat::RGBA,
+        )
     }
 }
 
@@ -94,15 +119,12 @@ impl Font {
 #[derive(Clone, Copy, Debug)]
 pub struct FontStyle {
     pub(crate) size: f32,
-    pub(crate) color: Color
+    pub(crate) color: Color,
 }
 
 impl FontStyle {
     /// Create a new instantce of a font style
     pub fn new(size: f32, color: Color) -> FontStyle {
-        FontStyle {
-            size,
-            color
-        }
+        FontStyle { size, color }
     }
 }
