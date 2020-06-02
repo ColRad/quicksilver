@@ -102,7 +102,7 @@ impl Window {
             .with_title(title)
             .with_dimensions(user_size.into());
         if let Some(path) = settings.icon_path {
-            window = window.with_window_icon(Some(Icon::from_path(path)?));
+            window = window.with_window_icon(Some(Icon::from_path(path).unwrap()));
         }
         if let Some(v) = settings.min_size {
             window = window.with_min_dimensions(v.into());
