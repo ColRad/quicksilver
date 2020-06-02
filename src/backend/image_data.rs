@@ -1,6 +1,6 @@
 use crate::backend::{Backend, instance};
 
-#[derive(Debug)]
+#[derive(Debug, Sync)]
 pub struct ImageData {
     pub id: u32,
     pub width: u32,
